@@ -60,3 +60,47 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+verityFrontend/node_modules/
+
+# Expo
+verityFrontend/.expo/
+verityFrontend/dist/
+verityFrontend/web-build/
+verityFrontend/expo-env.d.ts
+
+# Native
+verityFrontend/.kotlin/
+verityFrontend/*.orig.*
+verityFrontend/*.jks
+verityFrontend/*.p8
+verityFrontend/*.p12
+verityFrontend/*.key
+verityFrontend/*.mobileprovision
+
+# Metro
+verityFrontend/.metro-health-check*
+
+# debug
+verityFrontend/npm-debug.*
+verityFrontend/yarn-debug.*
+verityFrontend/yarn-error.*
+
+# macOS
+verityFrontend/.DS_Store
+verityFrontend/*.pem
+
+# local env files
+verityFrontend/.env*.local
+
+# typescript
+verityFrontend/*.tsbuildinfo
+
+verityFrontend/app-example
+
+# generated native folders
+verityFrontend/ios
+verityFrontend//android
