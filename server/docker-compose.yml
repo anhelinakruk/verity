@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    container_name: verity-surrealdb
+    ports:
+      - "8000:8000"
+    command: start --log trace --user root --pass root memory
+    volumes:
+      - surrealdb-data:/data
+    environment:
+      - SURREAL_LOG=trace
+    networks:
+      - verity-network
+
+volumes:
+  surrealdb-data:
+
+networks:
+  verity-network:
+    driver: bridge
