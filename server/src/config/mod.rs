@@ -28,6 +28,7 @@ pub struct BlockchainConfig {
     pub rpc_url: String,
     pub chain_id: u64,
     pub contract_address: String,
+    pub admin_private_key: String,
 }
 
 impl Config {
@@ -52,6 +53,7 @@ impl Config {
                 rpc_url: env::var("ETH_RPC_URL")?,
                 chain_id: env::var("CHAIN_ID")?.parse()?,
                 contract_address: env::var("VOTING_CONTRACT_ADDRESS")?,
+                admin_private_key: env::var("ADMIN_PRIVATE_KEY")?,
             },
         })
     }

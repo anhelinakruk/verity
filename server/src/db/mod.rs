@@ -1,6 +1,8 @@
 use anyhow::Result;
-use surrealdb::engine::remote::ws::{Client, Ws};
+use serde::{Deserialize, Serialize};
+use surrealdb::engine::remote::http::{Client, Http};
 use surrealdb::opt::auth::Root;
+use surrealdb::sql::Thing;
 use surrealdb::Surreal;
 
 use crate::config::DatabaseConfig;
@@ -11,9 +13,33 @@ pub struct Database {
     pub client: Surreal<Client>,
 }
 
+// Auth & Wallet models
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct User {
+    pub id: Option<Thing>,
+    pub address: String,
+    pub created_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Wallet {
+    pub id: Option<Thing>,
+    pub user_id: String,
+    pub address: String,
+    pub created_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Nonce {
+    pub id: Option<Thing>,
+    pub value: String,
+    pub exp: Option<String>,
+    pub iat: Option<String>,
+}
+
 impl Database {
     pub async fn new(config: &DatabaseConfig) -> Result<Self> {
-        let client = Surreal::new::<Ws>(&config.url).await?;
+        let client = Surreal::new::<Http>(&config.url).await?;
 
         client
             .signin(Root {
@@ -113,5 +139,94 @@ impl Database {
 
         let votes: Vec<Vote> = result.take(0)?;
         Ok(!votes.is_empty())
+    }
+
+    // ============================================
+    // Auth & User operations
+    // ============================================
+
+    pub async fn create_user(&self, address: &str) -> Result<User> {
+        let user: Option<User> = self
+            .client
+            .create("user")
+            .content(User {
+                id: None,
+                address: address.to_lowercase(),
+                created_at: None,
+            })
+            .await?;
+
+        user.ok_or_else(|| anyhow::anyhow!("Failed to create user"))
+    }
+
+    pub async fn get_user_by_address(&self, address: &str) -> Result<Option<User>> {
+        let mut result = self
+            .client
+            .query("SELECT * FROM user WHERE address = type::string(string::lowercase($address))")
+            .bind(("address", address.to_string()))
+            .await?;
+
+        let users: Vec<User> = result.take(0)?;
+        Ok(users.into_iter().next())
+    }
+
+    pub async fn save_nonce(&self, value: &str) -> Result<()> {
+        self.client
+            .query(
+                "
+                DELETE nonce WHERE exp < time::now() RETURN BEFORE;
+                CREATE ONLY nonce SET value = type::string($value), exp = time::now() + 5m, iat = time::now();
+                ",
+            )
+            .bind(("value", value.to_string()))
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_nonce(&self, value: &str) -> Result<Option<Nonce>> {
+        let mut result = self
+            .client
+            .query(
+                "
+                DELETE nonce WHERE exp < time::now() RETURN BEFORE;
+                SELECT * FROM nonce WHERE value = type::string($value);
+                ",
+            )
+            .bind(("value", value.to_string()))
+            .await?;
+
+        let nonces: Vec<Nonce> = result.take(1)?;
+        Ok(nonces.into_iter().next())
+    }
+
+    // ============================================
+    // Wallet operations
+    // ============================================
+
+    pub async fn create_wallet(&self, user_id: &str, address: &str) -> Result<Wallet> {
+        let wallet: Option<Wallet> = self
+            .client
+            .create("wallets")
+            .content(Wallet {
+                id: None,
+                user_id: user_id.to_string(),
+                address: address.to_string(),
+                created_at: None,
+            })
+            .await?;
+
+        Ok(wallet.unwrap())
+    }
+
+    pub async fn get_wallet_by_address(&self, address: String) -> Result<Option<Wallet>> {
+        let mut result = self
+            .client
+            .query("SELECT * FROM wallets WHERE address = $address")
+            .bind(("address", address))
+            .await?;
+
+        let wallets: Vec<Wallet> = result.take(0)?;
+        Ok(wallets.into_iter().next())
     }
 }

@@ -1,0 +1,18 @@
+services:
+  surrealdb:
+    container_name: verity-surrealdb
+    hostname: surrealdb
+    build:
+      context: .
+      dockerfile: ./surrealdb.Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - SURREAL_USER=root
+      - SURREAL_PASS=root
+    volumes:
+      - surrealdb-data:/data
+    command: ["start", "--log", "info", "--user", "root", "--pass", "root", "memory"]
+
+volumes:
+  surrealdb-data:

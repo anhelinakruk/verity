@@ -2,6 +2,8 @@ use alloy::primitives::{Address, U256};
 use alloy::providers::{Provider, ProviderBuilder, RootProvider};
 use alloy::sol;
 use alloy::transports::http::{Client, Http};
+use alloy::network::EthereumWallet;
+use alloy::signers::local::PrivateKeySigner;
 use anyhow::Result;
 use std::str::FromStr;
 
@@ -18,6 +20,7 @@ sol!(
 pub struct BlockchainClient {
     provider: RootProvider<Http<Client>>,
     contract_address: Address,
+    admin_wallet: EthereumWallet,
 }
 
 impl BlockchainClient {
@@ -27,12 +30,17 @@ impl BlockchainClient {
 
         let contract_address = Address::from_str(&config.contract_address)?;
 
+        // Setup admin signer
+        let signer: PrivateKeySigner = config.admin_private_key.parse()?;
+        let admin_wallet = EthereumWallet::from(signer);
+
         tracing::info!("Connected to blockchain at {}", config.rpc_url);
         tracing::info!("Contract address: {}", contract_address);
 
         Ok(BlockchainClient {
             provider,
             contract_address,
+            admin_wallet,
         })
     }
 
@@ -98,5 +106,81 @@ impl BlockchainClient {
         let contract = VotingSystem::new(self.contract_address, &self.provider);
         let result = contract.getWinningOption(proposal_id).call().await?;
         Ok((result.winningOption, result.winningVoteCount))
+    }
+
+    /// Create a new proposal (sends transaction)
+    pub async fn create_proposal(
+        &self,
+        title: String,
+        description: String,
+        options: Vec<String>,
+        duration_days: U256,
+    ) -> Result<(U256, alloy::primitives::TxHash)> {
+        // Get current proposal count (next proposal will have this ID)
+        let proposal_id = self.get_proposal_count().await?;
+
+        // Create provider with wallet for signing
+        let rpc_url = self.provider.client().transport().url().to_string().parse()?;
+        let provider_with_wallet = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .wallet(self.admin_wallet.clone())
+            .on_http(rpc_url);
+
+        let contract = VotingSystem::new(self.contract_address, provider_with_wallet);
+
+        // Call createProposal and wait for receipt
+        let tx = contract.createProposal(title, description, options, duration_days).send().await?;
+        let receipt = tx.get_receipt().await?;
+
+        Ok((proposal_id, receipt.transaction_hash))
+    }
+
+    /// Cast a vote (sends transaction)
+    pub async fn cast_vote(
+        &self,
+        proposal_id: U256,
+        option_index: U256,
+        voter_wallet: EthereumWallet,
+    ) -> Result<alloy::primitives::TxHash> {
+        let rpc_url = self.provider.client().transport().url().to_string().parse()?;
+        let provider_with_wallet = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .wallet(voter_wallet)
+            .on_http(rpc_url);
+
+        let contract = VotingSystem::new(self.contract_address, provider_with_wallet);
+        let tx = contract.vote(proposal_id, option_index).send().await?;
+        let receipt = tx.get_receipt().await?;
+
+        Ok(receipt.transaction_hash)
+    }
+
+    /// Send ETH from admin wallet to an address (for testing/faucet)
+    pub async fn send_eth(
+        &self,
+        to: Address,
+        amount_eth: &str,
+    ) -> Result<alloy::primitives::TxHash> {
+        use alloy::primitives::utils::parse_ether;
+        use alloy::rpc::types::TransactionRequest;
+
+        let amount = parse_ether(amount_eth)?;
+
+        // Create provider with wallet for signing
+        let rpc_url = self.provider.client().transport().url().to_string().parse()?;
+        let provider_with_wallet = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .wallet(self.admin_wallet.clone())
+            .on_http(rpc_url);
+
+        // Create and send transaction
+        let tx = TransactionRequest::default()
+            .to(to)
+            .value(amount);
+
+        let pending = provider_with_wallet.send_transaction(tx).await?;
+        let receipt = pending.get_receipt().await?;
+
+        Ok(receipt.transaction_hash)
     }
 }

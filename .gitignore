@@ -64,8 +64,6 @@ server/target/
 server/**/*.rs.bk
 server/*.pdb
 
-# Cargo
-server/Cargo.lock
 
 # ============================================
 # Solidity / Foundry / Contracts
@@ -130,3 +128,8 @@ yarn-error.log*
 node_modules/
 package-lock.json
 yarn.lock
+
+# ============================================
+# Expo / React Native
+# ============================================
+mobile/.expo/
